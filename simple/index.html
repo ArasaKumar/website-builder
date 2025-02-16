@@ -8,9 +8,7 @@
             margin: 0;
             padding: 0;
             height: 500vh;
-            /* Makes page scrollable, adjust as needed */
             background-color: #f0f0f0;
-            /* Light background to see the scrollable area */
         }
 
         .video-container {
@@ -54,16 +52,34 @@
             border-radius: 5px;
             z-index: 1000;
         }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #00ff00;
+        }
     </style>
 </head>
 
 <body>
     <div class="video-container">
-        <!-- Using a sample video from the internet -->
-        <video id="scrollVideo" preload="auto" muted>
+        <video id="scrollVideo" preload="metadata" muted playsinline>
             <source src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressBar"></div>
     </div>
     <div class="scroll-text">Scroll to control video playback</div>
     <div class="debug-info" id="debugInfo">Loading video...</div>
@@ -72,59 +88,89 @@
         document.addEventListener('DOMContentLoaded', function () {
             const video = document.getElementById('scrollVideo');
             const debugInfo = document.getElementById('debugInfo');
+            const progressBar = document.getElementById('progressBar');
+            let isScrolling = false;
 
-            // Debug function
             function updateDebugInfo(message) {
                 debugInfo.innerHTML = message;
-                console.log(message);
             }
 
-            // Error handling for video
+            video.addEventListener('canplaythrough', () => {
+                updateDebugInfo('Video fully loaded and ready to play');
+                // Enable scroll handling only after the video is fully loaded
+                window.addEventListener('scroll', handleScroll, { passive: true });
+            });
+
+            function updateVideoTime(scrollPosition) {
+                const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+                const scrollPercentage = Math.max(0, Math.min(1, scrollPosition / scrollHeight));
+                const targetTime = video.duration * scrollPercentage;
+
+                // Update video time directly
+                video.currentTime = targetTime;
+
+                // Update progress bar
+                progressBar.style.width = (scrollPercentage * 100) + '%';
+
+                // Update debug info
+                updateDebugInfo(`Scroll Position: ${Math.round(scrollPosition)}px<br>
+            Video Time: ${targetTime.toFixed(2)}s<br>
+            Video Duration: ${video.duration.toFixed(2)}s<br>
+            Progress: ${(scrollPercentage * 100).toFixed(1)}%`);
+            }
+
+            function handleScroll() {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    requestAnimationFrame(() => {
+                        console.log("scrolling : ", window.scrollY);
+                        updateVideoTime(window.scrollY);
+                        isScrolling = false;
+                    });
+                }
+            }
+
+            // Video event handlers
             video.addEventListener('error', function (e) {
                 updateDebugInfo('Error loading video: ' + (video.error ? video.error.message : 'Unknown error'));
             });
 
-            // Loading states
             video.addEventListener('loadstart', () => updateDebugInfo('Started loading video...'));
             video.addEventListener('waiting', () => updateDebugInfo('Waiting for video...'));
-            video.addEventListener('canplay', () => updateDebugInfo('Video can start playing'));
+            video.addEventListener('canplay', () => {
+                updateDebugInfo('Video ready to play');
+                // Initial update
+                updateVideoTime(window.scrollY);
+            });
 
-            // Wait for video metadata to load
             video.addEventListener('loadedmetadata', function () {
                 updateDebugInfo('Video metadata loaded. Duration: ' + video.duration + 's');
-
-                // Calculate scroll distance needed for video duration
-                const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-
-                // Update video time based on scroll position
-                window.addEventListener('scroll', function () {
-                    const scrollPosition = window.scrollY;
-                    const scrollPercentage = scrollPosition / scrollHeight;
-                    const videoTime = video.duration * scrollPercentage;
-
-                    // Only update if the time is different to avoid unnecessary updates
-                    if (Math.abs(video.currentTime - videoTime) > 0.01) {
-                        video.currentTime = videoTime;
-                    }
-
-                    updateDebugInfo(`
-                        Scroll Position: ${Math.round(scrollPosition)}px<br>
-                        Video Time: ${videoTime.toFixed(2)}s<br>
-                        Video Duration: ${video.duration.toFixed(2)}s<br>
-                        Progress: ${(scrollPercentage * 100).toFixed(1)}%
-                    `);
-                });
+                // Add scroll listener
+                window.addEventListener('scroll', handleScroll, { passive: true });
+                // Initial update
+                updateVideoTime(window.scrollY);
             });
 
             // Prevent default video controls
-            video.addEventListener('click', function (e) {
-                e.preventDefault();
-            });
+            video.addEventListener('click', e => e.preventDefault());
+            video.addEventListener('contextmenu', e => e.preventDefault());
 
-            // Disable right-click on video
-            video.addEventListener('contextmenu', function (e) {
-                e.preventDefault();
-            });
+            // Touch events for mobile
+            let touchStartY = 0;
+            let lastTouchY = 0;
+            let touchScrollSpeed = 1.5; // Adjust this value to change touch scroll sensitivity
+
+            window.addEventListener('touchstart', (e) => {
+                touchStartY = e.touches[0].clientY;
+                lastTouchY = touchStartY;
+            }, { passive: true });
+
+            window.addEventListener('touchmove', (e) => {
+                const currentY = e.touches[0].clientY;
+                const deltaY = (lastTouchY - currentY) * touchScrollSpeed;
+                window.scrollBy(0, deltaY);
+                lastTouchY = currentY;
+            }, { passive: true });
         });
     </script>
 </body>
